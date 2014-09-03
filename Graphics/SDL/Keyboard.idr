@@ -3,6 +3,7 @@ module Graphics.SDL.Keyboard
 import Graphics.SDL.Common
 import Graphics.SDL.ScanCode
 import Graphics.SDL.KeyCode
+import Graphics.SDL.Video
 import Utils.Map
 
 %include C "SDL2/SDL_keyboard.h"

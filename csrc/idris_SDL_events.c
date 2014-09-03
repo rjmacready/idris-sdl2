@@ -117,9 +117,9 @@ Uint8 idris_mouseButtonEvent_state() {
 Uint8 idris_mouseButtonEvent_padding1() {
     return event.button.padding1;
 }
-Uint8 idris_mouseButtonEvent_padding2() {
-    return event.button.padding2;
-}
+//Uint8 idris_mouseButtonEvent_padding2() {
+//    return event.button.padding2;
+//}
 Sint32 idris_mouseButtonEvent_x() {
     return event.button.x;
 }

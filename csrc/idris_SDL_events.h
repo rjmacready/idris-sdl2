@@ -46,7 +46,7 @@ Uint32 idris_mouseButtonEvent_which();
 Uint8 idris_mouseButtonEvent_button();
 Uint8 idris_mouseButtonEvent_state();
 Uint8 idris_mouseButtonEvent_padding1();
-Uint8 idris_mouseButtonEvent_padding2();
+//Uint8 idris_mouseButtonEvent_padding2();
 Sint32 idris_mouseButtonEvent_x();
 Sint32 idris_mouseButtonEvent_y();
 

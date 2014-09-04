@@ -166,7 +166,7 @@ data Event = WindowEvent Bits32 Bits8 Bits8 Bits8 Bits8 Int Int
            | TextEditingEvent Bits32 String Int Int
            | TextInputEvent Bits32 String
            | MouseMotionEvent Bits32 Bits32 Bits32 Int Int Int Int
-           | MouseButtonEvent ButtonEventType Bits32 Bits32 Bits8 Bits8 Bits8 Bits8 Int Int
+           | MouseButtonEvent ButtonEventType Bits32 Bits32 Bits8 Bits8 Bits8 Int Int
            | MouseWheelEvent Bits32 Bits32 Int Int
            | JoyAxisEvent Int Bits8 Bits8 Bits8 Bits8 Bits32 Bits16
            | JoyBallEvent Int Bits8 Bits8 Bits8 Bits8 Bits32 Bits32
@@ -362,9 +362,9 @@ getMouseButtonEvent_state =
 getMouseButtonEvent_padding1 : IO Bits8
 getMouseButtonEvent_padding1 =
     mkForeign (FFun "idris_mouseButtonEvent_padding1" [] FBits8)
-getMouseButtonEvent_padding2 : IO Bits8
-getMouseButtonEvent_padding2 =
-    mkForeign (FFun "idris_mouseButtonEvent_padding2" [] FBits8)
+--getMouseButtonEvent_padding2 : IO Bits8
+--getMouseButtonEvent_padding2 =
+--    mkForeign (FFun "idris_mouseButtonEvent_padding2" [] FBits8)
 getMouseButtonEvent_x : IO Int
 getMouseButtonEvent_x =
     mkForeign (FFun "idris_mouseButtonEvent_x" [] FInt)
@@ -380,7 +380,6 @@ getMouseButtonEvent button =
                         getMouseButtonEvent_button
                         getMouseButtonEvent_state
                         getMouseButtonEvent_padding1
-                        getMouseButtonEvent_padding2
                         getMouseButtonEvent_x
                         getMouseButtonEvent_y |]
 

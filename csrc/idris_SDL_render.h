@@ -11,7 +11,7 @@ SDL_Window* idris_sharedWindow_window();
 int idris_SDL_createWindowAndRenderer(int width, int height, Uint32 flags);
 int idris_SDL_createSoftwareRenderer(SDL_Surface* surface);
 int idris_SDL_getRenderer(SDL_Window* window);
-
+SDL_Renderer* idris_SDL_CreateRenderer(SDL_Window* window, int index, Uint32 flags);
 
 int idris_SDL_getRendererInfo(SDL_Renderer* renderer);
 char* idris_rendererInfo_name();

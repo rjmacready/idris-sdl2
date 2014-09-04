@@ -11,8 +11,14 @@ SDL_Window* idris_sharedWindow_window() {
 }
 
 int idris_SDL_createWindowAndRenderer(int width, int height, Uint32 flags) {
+  printf("idris_SDL_createWindowAndRenderer %d\n", flags);
     return 0 == SDL_CreateWindowAndRenderer(width, height, flags,
                                             &window, &renderer);
+}
+
+SDL_Renderer* idris_SDL_CreateRenderer(SDL_Window* window, int index, Uint32 flags) {
+  printf("idris_SDL_CreateRenderer %d\n", flags);
+  return SDL_CreateRenderer(window, index, flags);
 }
 
 
@@ -36,6 +42,7 @@ char* idris_rendererInfo_name() {
 }
 
 Uint32 idris_rendererInfo_flags() {
+  printf("idris_rendererInfo_flags %d\n", rendererInfo.flags);
     return rendererInfo.flags;
 }
 

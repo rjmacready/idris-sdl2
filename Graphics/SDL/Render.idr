@@ -61,7 +61,7 @@ createWindowAndRenderer w h flags =
 public
 createRenderer : Window -> Int -> List RendererFlag -> IO Renderer
 createRenderer (MkWindow win) index flags =
-    [| MkRenderer (mkForeign (FFun "SDL_CreateRenderer" [FPtr, FInt, FBits32] FPtr) win index (sumBits flags)) |]
+    [| MkRenderer (mkForeign (FFun "idris_SDL_CreateRenderer" [FPtr, FInt, FBits32] FPtr) win index (sumBits flags)) |]
 
 public
 createSoftwareRenderer : Surface -> IO (Either String Renderer)

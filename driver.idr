@@ -15,6 +15,162 @@ import Graphics.SDL.GameController
 import Graphics.SDL.Render
 import Utils.Map
 
+data Player =
+     X | O
+
+instance Eq Player where
+   (==) X X = True
+   (==) O O = True
+   (==) _ _ = False
+
+instance Show Player where
+         show X = "X"
+         show O = "O"
+
+data GamePhase = 
+          Playing
+          | Win Player
+          | Stalemate
+
+GameState : Type
+GameState = (Player, Vect 9 (Maybe Player))
+
+initState : GameState
+initState = (X, [Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing])
+
+xyToFlat : (Int, Int) -> Int
+xyToFlat (x, y) = y * 3 + x
+
+flatToXy : Int -> (Int, Int)
+flatToXy flat = (flat `modInt` 3, flat `divInt` 3)
+
+mapState : GameState -> (Int -> Maybe Player -> IO ()) -> IO ()
+mapState g action = 
+         let (_, board) = g in
+                do walk 0 board
+             where
+                walk : Int -> Vect _ (Maybe Player) -> IO ()
+                walk _ [] = do 
+                            return ()
+                walk i (x :: xs) = do 
+                             action i x
+                             walk (i+1) xs
+
+             
+testVictory : Vect 9 (Maybe Player) -> Fin 9 -> Fin 9 -> Fin 9 -> Maybe Player
+testVictory board i0 i1 i2 =
+                  case ([| (index i0 board) == (index i1 board) |],
+                     [| (index i1 board) == (index i2 board) |]) of
+                    (Just True, Just True) =>
+                          (index i0 board)                          
+                    (_, _) => Nothing
+            
+victoryDiag0 : Vect 9 (Maybe Player) -> Maybe Player
+victoryDiag0 board =
+           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (0, 0))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (1, 1))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (2, 2))) (fromIntegerNat 9)) in
+               do
+                i0 <- i0
+                i1 <- i1
+                i2 <- i2
+                testVictory board i0 i1 i2
+ 
+
+victoryDiag1 : Vect 9 (Maybe Player) -> Maybe Player
+victoryDiag1 board =
+           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (2, 0))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (1, 1))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (0, 2))) (fromIntegerNat 9)) in
+               do
+                i0 <- i0
+                i1 <- i1
+                i2 <- i2
+                testVictory board i0 i1 i2
+
+                                         
+victoryRow : Vect 9 (Maybe Player) -> Int -> Maybe Player
+victoryRow board row =
+           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (0, row))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (1, row))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (2, row))) (fromIntegerNat 9)) in
+               do
+                i0 <- i0
+                i1 <- i1
+                i2 <- i2
+                testVictory board i0 i1 i2
+
+
+victoryCol : Vect 9 (Maybe Player) -> Int -> Maybe Player
+victoryCol board col =
+           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (col, 0))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (col, 1))) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat (col, 2))) (fromIntegerNat 9)) in
+               do
+                i0 <- i0
+                i1 <- i1
+                i2 <- i2
+                testVictory board i0 i1 i2
+
+
+firstOf : Maybe Player -> Maybe Player -> Maybe Player
+firstOf Nothing a = a
+firstOf a _ = a
+
+victory : Vect 9 (Maybe Player) -> Maybe Player
+victory board = 
+        firstOf (victoryRow board 0) $ 
+        firstOf (victoryRow board 1) $
+        firstOf (victoryRow board 2) $
+        firstOf (victoryCol board 0) $ 
+        firstOf (victoryCol board 1) $
+        firstOf (victoryCol board 2) $
+        firstOf (victoryDiag0 board)
+                (victoryDiag1 board)
+
+
+getGamePhase : GameState -> GamePhase
+getGamePhase g =
+             let (_, board) = g in
+                 let victor = victory board in
+                     case victor of
+                          Nothing =>
+                                  let someEmpty = Vect.find (\x => case x of
+                                                                   Nothing => True
+                                                                   _ => False) board in
+                                  case someEmpty of
+                                       Nothing => Stalemate
+                                       Just _ => Playing
+                          Just v => Win v
+
+
+screenToXy : (Int, Int) -> Maybe (Int, Int)
+screenToXy (sx, sy) = if sx > 300 || sy > 300 then
+                         Nothing
+                      else
+                        Just (sx `divInt` 100, sy `divInt` 100)
+
+
+nextPlayer : Player -> Player
+nextPlayer x =
+           case x of
+                X => O
+                O => X
+
+makePlay : GameState -> (Int, Int) -> Maybe GameState
+makePlay prev idx = 
+         let flat = integerToFin (cast (xyToFlat idx)) (fromIntegerNat 9) in
+         case flat of 
+              Nothing => Nothing
+              Just flat => 
+                   let (current, board) = prev in
+                   case (index flat board) of
+                        Just _ => Nothing
+                        Nothing => 
+                                Just (nextPlayer current, 
+                                     replaceAt flat (Just current) board)
+
+
 doInit : IO ()
 doInit = do
     init <- init [InitEverything]
@@ -56,10 +212,28 @@ doWindow = do
                   testRenderer rend
                   putStr "ok\n"
                   return (Just (win, rend))
+                  
+drawXat : Renderer -> (Int, Int) -> IO ()
+drawXat rend (x, y) = 
+             let (x, y) = (x * 100, y * 100) in
+             do
+                renderDrawLine rend (MkPoint x y) (MkPoint (x+100) (y+100))
+                renderDrawLine rend (MkPoint (x+100) y) (MkPoint x (y+100))
+                return ()
 
-renderScene : Window -> Renderer -> IO ()
-renderScene w rend = do
-                       --putStr "."
+drawOat : Renderer -> (Int, Int) -> IO ()
+drawOat rend (x, y) =
+             let (x, y) = (x * 100, y * 100) in
+             do
+                renderDrawLine rend (MkPoint (x+50) y) (MkPoint (x+100) (y+50))
+                renderDrawLine rend (MkPoint (x+100) (y+50)) (MkPoint (x + 50) (y+100))
+                renderDrawLine rend (MkPoint (x+50) (y + 100)) (MkPoint x (y+50))
+                renderDrawLine rend (MkPoint x (y + 50)) (MkPoint (x+50) y)
+                return ()
+
+
+renderScene : Window -> Renderer -> GameState -> IO ()
+renderScene w rend g = do
                        setRenderDrawColor rend (MkColor 0 0 0 255)
                        renderClear rend
                        setRenderDrawColor rend (MkColor 255 255 255 255)
@@ -69,49 +243,73 @@ renderScene w rend = do
                        renderDrawLine rend (MkPoint 100 0) (MkPoint 100 300)
                        renderDrawLine rend (MkPoint 200 0) (MkPoint 200 300)
                        
+                       mapState g (\i => \p =>
+                                   case p of
+                                        Nothing => do 
+--                                                putStrLn $ "nothing at " ++ (show i)
+                                                return ()
+                                        Just X =>
+                                               let upperLeft = flatToXy i in
+                                               do 
+--                                                  putStrLn $ "X at " ++ (show i)
+                                                  drawXat rend upperLeft
+                                                  return ()
+                                        Just O =>
+                                               let upperLeft = flatToXy i in
+                                               do 
+--                                                  putStrLn $ "O at " ++ (show i)
+                                                  drawOat rend upperLeft
+                                                  return ()
+) 
+                       
                        renderPresent rend
-                       --putStr "*"
 
 
-eventLoopTest : Window -> Renderer -> IO ()
-eventLoopTest w r = do
-    event <- pollEvent
-    case event of
-        Left err => do
-            delay 10
-            eventLoopTest w r
-        Right (timestamp, event) =>
-            case event of
-                QuitEvent => do
-                          return ()
-                MouseButtonEvent ButtonDown b c d e f g h => do
-                          putStr "mouse bt "
-                          putStr (show b)
-                          putStr " "
-                          putStr (show c)
-                          putStr " "
-                          putStr (show d)
-                          putStr " "
-                          putStr (show e)
-                          putStr " "
-                          putStr (show f)
-                          putStr " "
-                          putStr (show g)
-                          putStr " "
-                          putStr (show h)
-                          putStr "\n"
-                          renderScene w r
-                          eventLoopTest w r
-                _ => do 
-                        renderScene w r
-                        eventLoopTest w r
+makeTurn : Int -> Int -> GameState -> GameState
+makeTurn sx sy gstate =
+     let pos = screenToXy (sx, sy) in
+     case pos of 
+          Nothing => gstate
+          Just pos =>
+               let newState = makePlay gstate pos in
+                   case newState of
+                        Nothing => gstate
+                        Just newState => newState
 
-{-
-    setClipboardText "clipboard2"
-    clip <- getClipboardText
-    putStrLn $ "Clipboard: " ++ (show clip)
-    delay 1000
--}
+
+mutual
+
+        renderAndEvents : Window -> Renderer -> GameState -> IO ()
+        renderAndEvents w r g = do
+                          renderScene w r g
+                          case (getGamePhase g) of
+                               Win p =>  do
+                                   putStrLn $ (show p) ++ " won!" 
+                                   return ()
+                               Stalemate => do
+                                    putStrLn "stalemate!"
+                                    return ()
+                               _ => do 
+                                    eventLoopTest w r g
+
+        eventLoopTest : Window -> Renderer -> GameState -> IO ()
+        eventLoopTest w r g = do
+                      event <- pollEvent
+                      case event of
+                           Left err => do
+                                delay 10
+
+                                renderAndEvents w r g
+                           Right (timestamp, event) =>
+                                 case event of
+                                      QuitEvent => do
+                                                return ()
+                                      MouseButtonEvent ButtonDown b c d e f sx sy => do            
+
+                                                       renderAndEvents w r (makeTurn sx sy g)
+                                      _ => do
+                                        renderAndEvents w r g
+
 
 main : IO ()
 main = do
@@ -126,14 +324,8 @@ main = do
               putStrLn $ show num
               putStrLn $ show mode
               putStr "start event loop\n"
-              eventLoopTest window renderer
+              eventLoopTest window renderer initState
+              return ()
          None => do
               putStr "error on doWindow\n"
               return ()
-
-{-
-num <- getDisplayBounds 0
-mode <- getDisplayMode 0 0
-putStrLn $ show num
-putStrLn $ show mode                                    
--}

@@ -57,60 +57,32 @@ mapState g action =
                              walk (i+1) xs
 
              
-testVictory : Vect 9 (Maybe Player) -> Fin 9 -> Fin 9 -> Fin 9 -> Maybe Player
-testVictory board i0 i1 i2 =
-                  case ([| (index i0 board) == (index i1 board) |],
+testVictory : Vect 9 (Maybe Player) -> (Int, Int) -> (Int, Int) -> (Int, Int) -> Maybe Player
+testVictory board pt0 pt1 pt2 =
+           let (i0, i1, i2) = (integerToFin (cast (xyToFlat pt0)) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat pt1)) (fromIntegerNat 9), 
+                               integerToFin (cast (xyToFlat pt2)) (fromIntegerNat 9)) in
+               do
+                i0 <- i0
+                i1 <- i1
+                i2 <- i2
+                case ([| (index i0 board) == (index i1 board) |],
                      [| (index i1 board) == (index i2 board) |]) of
                     (Just True, Just True) =>
                           (index i0 board)                          
                     (_, _) => Nothing
             
 victoryDiag0 : Vect 9 (Maybe Player) -> Maybe Player
-victoryDiag0 board =
-           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (0, 0))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (1, 1))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (2, 2))) (fromIntegerNat 9)) in
-               do
-                i0 <- i0
-                i1 <- i1
-                i2 <- i2
-                testVictory board i0 i1 i2
+victoryDiag0 board = testVictory board (0, 0) (1, 1) (2, 2)
  
-
 victoryDiag1 : Vect 9 (Maybe Player) -> Maybe Player
-victoryDiag1 board =
-           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (2, 0))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (1, 1))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (0, 2))) (fromIntegerNat 9)) in
-               do
-                i0 <- i0
-                i1 <- i1
-                i2 <- i2
-                testVictory board i0 i1 i2
-
+victoryDiag1 board = testVictory board (2, 0) (1, 1) (0, 2)
                                          
 victoryRow : Vect 9 (Maybe Player) -> Int -> Maybe Player
-victoryRow board row =
-           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (0, row))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (1, row))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (2, row))) (fromIntegerNat 9)) in
-               do
-                i0 <- i0
-                i1 <- i1
-                i2 <- i2
-                testVictory board i0 i1 i2
-
+victoryRow board row = testVictory board (0, row) (1, row) (2, row)
 
 victoryCol : Vect 9 (Maybe Player) -> Int -> Maybe Player
-victoryCol board col =
-           let (i0, i1, i2) = (integerToFin (cast (xyToFlat (col, 0))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (col, 1))) (fromIntegerNat 9), 
-                               integerToFin (cast (xyToFlat (col, 2))) (fromIntegerNat 9)) in
-               do
-                i0 <- i0
-                i1 <- i1
-                i2 <- i2
-                testVictory board i0 i1 i2
+victoryCol board col = testVictory board (col, 0) (col, 1) (col, 2)
 
 
 firstOf : Maybe Player -> Maybe Player -> Maybe Player
@@ -221,6 +193,7 @@ drawXat rend (x, y) =
                 renderDrawLine rend (MkPoint (x+100) y) (MkPoint x (y+100))
                 return ()
 
+-- Actually draws a rhombus
 drawOat : Renderer -> (Int, Int) -> IO ()
 drawOat rend (x, y) =
              let (x, y) = (x * 100, y * 100) in
@@ -246,21 +219,17 @@ renderScene w rend g = do
                        mapState g (\i => \p =>
                                    case p of
                                         Nothing => do 
---                                                putStrLn $ "nothing at " ++ (show i)
                                                 return ()
                                         Just X =>
                                                let upperLeft = flatToXy i in
                                                do 
---                                                  putStrLn $ "X at " ++ (show i)
                                                   drawXat rend upperLeft
                                                   return ()
                                         Just O =>
                                                let upperLeft = flatToXy i in
                                                do 
---                                                  putStrLn $ "O at " ++ (show i)
                                                   drawOat rend upperLeft
-                                                  return ()
-) 
+                                                  return ()) 
                        
                        renderPresent rend
 

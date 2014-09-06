@@ -1,5 +1,10 @@
 module Main
 
+-- TODO error handling
+-- TODO can the effects library be useful here?
+-- TODO mouse button elements should be more semantic! instead of UInt8 and such
+-- TODO use more semantic types! to distinguish from flat indices, to col/row indices, to x/y coordinates
+
 import Graphics.SDL.Common
 import Graphics.SDL.SDL
 import Graphics.SDL.Timer
@@ -15,8 +20,27 @@ import Graphics.SDL.GameController
 import Graphics.SDL.Render
 import Utils.Map
 
+
+xyToFlat : (Int, Int) -> Int
+xyToFlat (x, y) = y * 3 + x
+
+flatToXy : Int -> (Int, Int)
+flatToXy flat = (flat `modInt` 3, flat `divInt` 3)
+
+screenToXy : (Int, Int) -> Maybe (Int, Int)
+screenToXy (sx, sy) = if sx > 300 || sy > 300 then
+                         Nothing
+                      else
+                        Just (sx `divInt` 100, sy `divInt` 100)
+
 data Player =
      X | O
+
+nextPlayer : Player -> Player
+nextPlayer x =
+           case x of
+                X => O
+                O => X
 
 instance Eq Player where
    (==) X X = True
@@ -32,31 +56,16 @@ data GamePhase =
           | Win Player
           | Stalemate
 
+instance Eq GamePhase where
+         (==) Playing Playing = True
+         (==) Stalemate Stalemate = True
+         (==) (Win a) (Win b) = a == b 
+         (==) _ _ = False
+
 GameState : Type
 GameState = (Player, Vect 9 (Maybe Player))
 
-initState : GameState
-initState = (X, [Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing])
 
-xyToFlat : (Int, Int) -> Int
-xyToFlat (x, y) = y * 3 + x
-
-flatToXy : Int -> (Int, Int)
-flatToXy flat = (flat `modInt` 3, flat `divInt` 3)
-
-mapState : GameState -> (Int -> Maybe Player -> IO ()) -> IO ()
-mapState g action = 
-         let (_, board) = g in
-                do walk 0 board
-             where
-                walk : Int -> Vect _ (Maybe Player) -> IO ()
-                walk _ [] = do 
-                            return ()
-                walk i (x :: xs) = do 
-                             action i x
-                             walk (i+1) xs
-
-             
 testVictory : Vect 9 (Maybe Player) -> (Int, Int) -> (Int, Int) -> (Int, Int) -> Maybe Player
 testVictory board pt0 pt1 pt2 =
            let (i0, i1, i2) = (integerToFin (cast (xyToFlat pt0)) (fromIntegerNat 9), 
@@ -100,7 +109,6 @@ victory board =
         firstOf (victoryDiag0 board)
                 (victoryDiag1 board)
 
-
 getGamePhase : GameState -> GamePhase
 getGamePhase g =
              let (_, board) = g in
@@ -116,18 +124,93 @@ getGamePhase g =
                           Just v => Win v
 
 
-screenToXy : (Int, Int) -> Maybe (Int, Int)
-screenToXy (sx, sy) = if sx > 300 || sy > 300 then
-                         Nothing
-                      else
-                        Just (sx `divInt` 100, sy `divInt` 100)
+
+initState : GameState
+initState = (X, [Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing])
+
+mapState : GameState -> (Int -> Maybe Player -> IO ()) -> IO ()
+mapState g action = 
+         let (_, board) = g in
+                do walk 0 board
+             where
+                walk : Int -> Vect _ (Maybe Player) -> IO ()
+                walk _ [] = do 
+                            return ()
+                walk i (x :: xs) = do 
+                             action i x
+                             walk (i+1) xs
+
+isFinalPh : GamePhase -> Bool
+isFinalPh phase = phase /= Playing
+
+Infinity : Int -- Float
+Infinity = 999999999999 -- 1 / 0
 
 
-nextPlayer : Player -> Player
-nextPlayer x =
-           case x of
-                X => O
-                O => X
+ThreeRowRow : Type
+ThreeRowRow = Vect 3 Int
+
+threeRow : Vect 8 ThreeRowRow
+threeRow = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], 
+            [2, 5, 8], [0, 4, 8], [2, 4, 6]]
+
+heuristicArray : Vect 4 (Vect 4 Int)
+heuristicArray = [[0, -10, -100, -1000], 
+                  [10, 0, 0, 0], 
+                  [100, 0, 0, 0], 
+                  [1000, 0, 0, 0]]
+
+countWays'' : Vect 9 (Maybe Player) -> Player -> Int -> (Int, Int) -> (Int, Int)
+countWays'' board p item (me', other') =
+           let idx = (integerToFin (cast item) (fromInteger 9)) in
+           case idx of 
+                Nothing => (me', other')
+                Just idx => 
+                     case (index idx board) of 
+                          Nothing => (me', other')
+                          Just p2 =>      
+                               if p2 == p then
+                                  (me'+1, other')
+                               else
+                                  (me', other'+1)
+
+countWays' : Vect 9 (Maybe Player) -> Player -> ThreeRowRow -> Int
+countWays' board p cells = 
+           let (me, other) = foldr (countWays'' board p) (0, 0) cells
+               me = (integerToFin (cast me) (fromIntegerNat 4))
+               other = (integerToFin (cast other) (fromIntegerNat 4)) in
+                     case (me, other) of
+                          (Just me, Just other) => 
+                                index other (index me heuristicArray)
+                          (_, _) => 0
+
+evalPosition : Player -> GameState -> Int
+evalPosition p g = 
+             let (_, board) = g in
+                 foldr (+) 0 $ map (countWays' board p) threeRow
+
+
+-- player O assumed to be computer
+calcHeu : GameState -> Int
+calcHeu g = 
+        evalPosition O g
+
+-- case (getGamePhase g) of
+--                 Win O =>  Infinity
+--                 Win X => -Infinity
+--                 _ => evalPosition O g
+
+availableSquares : GameState -> List Int
+availableSquares g = 
+                 let (_, board) = g in
+                     aux [] 0 board
+                 where
+                        aux : List Int -> Int -> Vect _ (Maybe Player) -> List Int
+                        aux acc i [] = acc
+                        aux acc i (Nothing :: xs) = aux (i :: acc) (i + 1) xs
+                        aux acc i (_ :: xs) = aux acc (i + 1) xs
+
+
 
 makePlay : GameState -> (Int, Int) -> Maybe GameState
 makePlay prev idx = 
@@ -142,6 +225,55 @@ makePlay prev idx =
                                 Just (nextPlayer current, 
                                      replaceAt flat (Just current) board)
 
+
+availableBranches : GameState -> List GameState
+availableBranches g = 
+                  let makePlayG = makePlay g in
+                  mapMaybe (\flat => makePlayG (flatToXy flat)) (availableSquares g)
+
+minimax : Int -> Bool -> GameState -> Int -- Float
+minimax depth maximizing g =
+        let phase = (getGamePhase g) in
+        if depth == 0 || isFinalPh phase then
+           calcHeu g
+        else
+           if maximizing then
+              foldr (\ ng => \ bestValue => 
+                    let val = minimax (depth - 1) False ng in
+                    max val bestValue) (-Infinity) (availableBranches g)
+           else
+              foldr (\ ng => \ bestValue => 
+                    let val = minimax (depth - 1) True ng in
+                    min val bestValue) Infinity (availableBranches g)
+
+minimaxDepth : Int
+minimaxDepth = 20 -- 20
+
+maximize : (Int, GameState) -> List GameState -> (Int, GameState)
+maximize a [] = a
+maximize (val, play) (x :: xs) = 
+         let mnmaxed = minimax minimaxDepth True x in
+             if val > mnmaxed then
+                maximize (val, play) xs
+             else
+                maximize (mnmaxed, x) xs
+
+makeComputerPlayAux : List GameState -> GameState -> GameState
+makeComputerPlayAux options g = 
+                    case options of
+                         [] => g
+                         [a] => a
+                         (x :: xs) => let (_, play) = maximize (minimax minimaxDepth True x, x) xs in
+                                          play
+
+makeComputerPlay : GameState -> GameState
+makeComputerPlay g = 
+                 let (current, board) = g in
+                         case (getGamePhase g, current) of
+                              (Playing, O) => 
+                                     let options = (availableBranches g) in 
+                                         makeComputerPlayAux options g
+                              (_, _) => g
 
 doInit : IO ()
 doInit = do
@@ -234,16 +366,20 @@ renderScene w rend g = do
                        renderPresent rend
 
 
+-- test input and game state and change game state if possible
 makeTurn : Int -> Int -> GameState -> GameState
 makeTurn sx sy gstate =
-     let pos = screenToXy (sx, sy) in
-     case pos of 
-          Nothing => gstate
-          Just pos =>
-               let newState = makePlay gstate pos in
-                   case newState of
-                        Nothing => gstate
-                        Just newState => newState
+     let (current, _) = gstate in
+     case current of
+          O => gstate -- it's the computer's turn!
+          X => let pos = screenToXy (sx, sy) in
+               case pos of 
+                    Nothing => gstate
+                    Just pos =>
+                         let newState = makePlay gstate pos in
+                             case newState of
+                                  Nothing => gstate
+                                  Just newState => newState
 
 
 mutual
@@ -259,7 +395,8 @@ mutual
                                     putStrLn "stalemate!"
                                     return ()
                                _ => do 
-                                    eventLoopTest w r g
+                                    -- putStrLn "still playing, make computer play!"
+                                    eventLoopTest w r (makeComputerPlay g)
 
         eventLoopTest : Window -> Renderer -> GameState -> IO ()
         eventLoopTest w r g = do
@@ -273,10 +410,9 @@ mutual
                                  case event of
                                       QuitEvent => do
                                                 return ()
-                                      MouseButtonEvent ButtonDown b c d e f sx sy => do            
-
-                                                       renderAndEvents w r (makeTurn sx sy g)
-                                      _ => do
+                                      MouseButtonEvent ButtonDown b c d e f sx sy => do
+                                                renderAndEvents w r (makeTurn sx sy g)
+                                      _ => do                                        
                                         renderAndEvents w r g
 
 
